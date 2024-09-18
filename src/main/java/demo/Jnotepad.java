@@ -255,9 +255,11 @@ public class Jnotepad extends JFrame {
         currentFile = selectedFile; // Lưu tên file hiện tại
         try (FileOutputStream fos = new FileOutputStream(selectedFile)) {
             fos.write(txtEditor.getText().getBytes());
+            }
         }
     }
-}
+   
+    
     public static void main(String[] args) {
         Jnotepad notepad = new Jnotepad("Demo Notepad");
         notepad.setVisible(true);
