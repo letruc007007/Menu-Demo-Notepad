@@ -15,6 +15,12 @@ import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
+import java.awt.print.PageFormat;
+import java.awt.print.Printable;
+import static java.awt.print.Printable.NO_SUCH_PAGE;
+import static java.awt.print.Printable.PAGE_EXISTS;
+import java.awt.print.PrinterException;
+import java.awt.print.PrinterJob;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -26,7 +32,7 @@ public class Jnotepad extends JFrame {
     private JMenu mFile, mEdit, mFormat, mView, mHelp, mZoom;
     private JMenuItem itemNew, itemOpen, itemSave, itemSaveAs, itemPageSetup, itemPrint, itemExit;
     private JMenuItem itemUndo, itemCut, itemCopy, itemPaste, itemDelete, itemSearch, itemFind, itemReplace, itemGoto, itemSelect, itemTime;
-    private JMenuItem itemFont, itemZoomOn, itemZoomIn, itemSend, itemAbout,itemView;
+    private JMenuItem itemFont, itemZoomOn, itemZoomIn, itemSend, itemAbout;
     private JCheckBoxMenuItem itemWord, itemBar;
     private int size = 14;
 
@@ -47,7 +53,6 @@ public class Jnotepad extends JFrame {
     }
 
     private void createMenu() {
-
         mBar = new JMenuBar();
 
         mFile = new JMenu("File");
@@ -123,11 +128,7 @@ public class Jnotepad extends JFrame {
 
         itemAbout = new JMenuItem("About Notepad");
         itemSend = new JMenuItem("Send Feedback");
-        itemView = new JMenuItem("View Help");
-        
-        mHelp.add(itemView);
         mHelp.add(itemSend);
-        mHelp.addSeparator();
         mHelp.add(itemAbout);
 
         setJMenuBar(mBar);
@@ -153,7 +154,7 @@ public class Jnotepad extends JFrame {
         // Xử lý sự kiện
         itemExit.addActionListener(e -> System.exit(0));
 
-        itemAbout.addActionListener(e -> 
+        itemAbout.addActionListener(e ->
             JOptionPane.showMessageDialog(Jnotepad.this, "About Notepad", "Information", JOptionPane.INFORMATION_MESSAGE)
         );
     }
@@ -202,67 +203,128 @@ public class Jnotepad extends JFrame {
             }
         });
 
-        // Xử lý sao chép
-        itemCopy.addActionListener(e -> txtEditor.copy());
+        // Xử lý in
+        itemPrint.addActionListener(e -> {
+            PrinterJob job = PrinterJob.getPrinterJob();
+            job.setPrintable(new Printable() {
+                @Override
+                public int print(Graphics graphics, PageFormat pageFormat, int pageIndex) throws PrinterException {
+                    if (pageIndex > 0) {
+                        return NO_SUCH_PAGE;
+                    }
+                    Graphics2D g2d = (Graphics2D) graphics;
+                    g2d.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+                    g2d.scale(0.8, 0.8); // Tùy chỉnh tỷ lệ in nếu cần
+                    txtEditor.printAll(g2d);
+                    return PAGE_EXISTS;
+                }
+            });
 
-        // Xử lý dán
-        itemPaste.addActionListener(e -> txtEditor.paste());
+            boolean doPrint = job.printDialog();
+            if (doPrint) {
+                try {
+                    job.print();
+                } catch (PrinterException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
 
-        // Thay đổi phông chữ
+        // Xử lý tìm kiếm
+        itemFind.addActionListener(e -> {
+            String searchTerm = JOptionPane.showInputDialog(Jnotepad.this, "Enter text to find:");
+            if (searchTerm != null && !searchTerm.isEmpty()) {
+                String content = txtEditor.getText();
+                int index = content.indexOf(searchTerm);
+                if (index >= 0) {
+                    txtEditor.select(index, index + searchTerm.length());
+                    txtEditor.requestFocus();
+                } else {
+                    JOptionPane.showMessageDialog(Jnotepad.this, "Text not found", "Find", JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+        });
+
+        // Xử lý thay thế
+        itemReplace.addActionListener(e -> {
+          String searchTerm = JOptionPane.showInputDialog(Jnotepad.this, "Enter text to find:");
+            if (searchTerm != null && !searchTerm.isEmpty()) {
+                String replaceTerm = JOptionPane.showInputDialog(Jnotepad.this, "Enter replacement text:");
+                if (replaceTerm != null) {
+                    String content = txtEditor.getText();
+                    content = content.replace(searchTerm, replaceTerm);
+                    txtEditor.setText(content);
+                }
+            }
+        });
+
+        // Xử lý phông chữ
         itemFont.addActionListener(e -> {
             String[] fonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
             String selectedFont = (String) JOptionPane.showInputDialog(
-                Jnotepad.this, 
-                "Choose a font:", 
-                "Font", 
-                JOptionPane.PLAIN_MESSAGE, 
-                null, 
-                fonts, 
+                Jnotepad.this,
+                "Choose a font:",
+                "Font Selection",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                fonts,
                 txtEditor.getFont().getFamily()
             );
 
             if (selectedFont != null) {
-                txtEditor.setFont(new Font(selectedFont, Font.PLAIN, txtEditor.getFont().getSize()));
+                String fontSizeStr = JOptionPane.showInputDialog(Jnotepad.this, "Enter font size:", txtEditor.getFont().getSize());
+                int fontSize;
+                try {
+                    fontSize = Integer.parseInt(fontSizeStr);
+                    if (fontSize > 0) {
+                        txtEditor.setFont(new Font(selectedFont, Font.PLAIN, fontSize));
+                    } else {
+                        JOptionPane.showMessageDialog(Jnotepad.this, "Font size must be greater than 0", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(Jnotepad.this, "Invalid font size", "Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         });
     }
 
     private void openFile() throws IOException {
-        JFileChooser dlgFile = new JFileChooser();
-        if (dlgFile.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            currentFile = dlgFile.getSelectedFile(); // Lưu tên file hiện tại
-            try (FileInputStream fis = new FileInputStream(currentFile)) {
-                byte[] b = new byte[fis.available()];
-                fis.read(b);
-                txtEditor.setText(new String(b));
-            }
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            currentFile = fileChooser.getSelectedFile();
+            FileInputStream fis = new FileInputStream(currentFile);
+            byte[] data = new byte[(int) currentFile.length()];
+            fis.read(data);
+            fis.close();
+            txtEditor.setText(new String(data, "UTF-8"));
         }
     }
 
     private void saveFile() throws IOException {
         if (currentFile != null) {
-            try (FileOutputStream fos = new FileOutputStream(currentFile)) {
-                fos.write(txtEditor.getText().getBytes());
-            }
+            FileOutputStream fos = new FileOutputStream(currentFile);
+            fos.write(txtEditor.getText().getBytes("UTF-8"));
+            fos.close();
         } else {
-            saveFileAs(); // Nếu chưa có tên file, gọi hàm lưu dưới dạng
+            saveFileAs();
         }
     }
+
     private void saveFileAs() throws IOException {
-    JFileChooser dlgFile = new JFileChooser();
-    if (dlgFile.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-        File selectedFile = dlgFile.getSelectedFile();
-        currentFile = selectedFile; // Lưu tên file hiện tại
-        try (FileOutputStream fos = new FileOutputStream(selectedFile)) {
-            fos.write(txtEditor.getText().getBytes());
-            }
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            currentFile = fileChooser.getSelectedFile();
+            FileOutputStream fos = new FileOutputStream(currentFile);
+            fos.write(txtEditor.getText().getBytes("UTF-8"));
+            fos.close();
         }
     }
-   
-    
+
     public static void main(String[] args) {
-        Jnotepad notepad = new Jnotepad("Demo Notepad");
-        notepad.setVisible(true);
+        SwingUtilities.invokeLater(() -> {
+            Jnotepad jnotepad = new Jnotepad("Jnotepad");
+            jnotepad.setVisible(true);
+        });
     }
 }
 
